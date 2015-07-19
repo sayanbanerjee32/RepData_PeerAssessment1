@@ -1,25 +1,188 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Reproducible Research Course Project 1"
+author: "Sayan Banerjee"
+date: "Saturday, July 18, 2015"
+output: html_document
 ---
+Loading the required packages for the data analysis
+
+```{r loadpackages, echo=TRUE, results="hide"}
+
+require(dplyr)
+require(knitr)
+require(xtable)
+require(ggplot2)
+```
+
+```{r setopions, echo=FALSE}
+opts_chunk$set(echo=TRUE, results="asis")
+```
 
 
-## Loading and preprocessing the data
+###Data
+The data for this assignment can be downloaded from the course web site:
+.Dataset: Activity monitoring data 
+
+The variables included in this dataset are:
+
+.steps: Number of steps taking in a 5-minute interval (missing values are coded as  NA )
 
 
-
-## What is mean total number of steps taken per day?
-
+.date: The date on which the measurement was taken in YYYY-MM-DD format
 
 
-## What is the average daily activity pattern?
+.interval: Identifier for the 5-minute interval in which measurement was taken
 
 
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
 
-## Imputing missing values
+The first step is to read the data and then to clean the rows with NA values for first set of analysis.
+
+```{r readdata}
+actDF <- read.csv("activity.csv", stringsAsFactors = FALSE)
+actclDF <- filter(actDF,!is.na(steps)&!is.na(date)&!is.na(interval))
+
+```
+
+###Analysis Part 1 - What is mean total number of steps taken per day?
+
+The histogram will display the total number of steps taken each day
 
 
+```{r histsteps}
+histDF <- actclDF %>% 
+  group_by(date) %>%
+  summarise(steps =sum(steps))
 
-## Are there differences in activity patterns between weekdays and weekends?
+hist(histDF$steps, xlab="Steps per day")
+
+
+```
+
+The below presents the mean and median total number of steps taken per day
+
+```{r statsteps}
+statStepsDF <- actclDF %>% 
+  group_by(date) %>%
+  summarise(meanSteps =mean(steps), medianSteps = median(steps), totalSteps=sum(steps))
+
+tab<- xtable(statStepsDF)
+print(tab, type="html")
+```
+
+###Analysis Part 2 - What is the average daily activity pattern?
+
+The below time series plot  displays 5-minute interval on x-axis and the average number of steps taken, averaged across all days on y-axis
+
+
+```{r stepinterval}
+
+intStepsDF <- actclDF %>% 
+  group_by(interval) %>%
+  summarise(avgSteps =mean(steps))
+
+g <- ggplot(data=intStepsDF, aes(x=interval,y=avgSteps))+
+  geom_line()
+
+maxAvgStepInt <- filter(intStepsDF,avgSteps==max(avgSteps))$interval
+
+g+geom_vline(xintercept=maxAvgStepInt, linetype="dotted")
+
+```
+
+The `r maxAvgStepInt`th 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps.
+
+###Analysis Part 3 - Imputing missing values
+
+There are a number of days/intervals where there are missing values (coded as  NA ). The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+1st step is to calculate report the total number of missing values in the dataset (i.e. the total number of rows with  NA s)
+
+
+```{r numNA}
+
+numNA <- nrow(filter(actDF,is.na(steps)))
+
+```
+
+There are `r numNA` rows with NA s.
+
+Next step  is to filling in all of the missing values in the dataset with mean for that 5-minute interval.
+
+```{r impMissVal}
+
+actImpDF<-actDF
+for(i in 1:nrow(actImpDF))
+  {
+    if (is.na(actImpDF[i,"steps"]))
+    {
+      actImpDF[i,"steps"] <- round(filter(intStepsDF,interval==actImpDF[i,"interval"])$avgSteps)
+    }
+  }
+
+```
+
+
+The below histogram displays the total number of steps taken each day after imputing missing data.
+
+
+```{r histimpSteps}
+histImpDF <- actImpDF %>% 
+  group_by(date) %>%
+  summarise(steps =sum(steps))
+
+hist(histImpDF$steps, xlab="Steps per day")
+
+
+```
+
+
+The below table report the mean and median total number of steps taken per day after imputing missing data.
+
+```{r statimpsteps}
+statImpStepsDF <- actImpDF %>% 
+  group_by(date) %>%
+  summarise(meanSteps =mean(steps), medianSteps = median(steps), totalSteps=sum(steps))
+
+tab<- xtable(statImpStepsDF)
+print(tab, type="html")
+```
+
+###Analysis Part 4 - Are there differences in activity patterns between weekdays and weekends?
+
+1st step is to create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+```{r weekday}
+
+wday <- function(y)
+         {
+            x<-""
+            if((weekdays(as.Date(y))=="Saturday") | (weekdays(as.Date(y))== "Sunday"))
+             {
+                x<-"weekend"
+             }
+           else
+             {
+               x<-"weekday"
+             }
+           x
+         }
+                    
+
+day <- data.frame(sapply(actImpDF$date,wday))
+actImpWDDF <- cbind(actImpDF,day)
+names(actImpWDDF)[4]<-paste("wday") 
+
+intWDStepsDF <- actImpWDDF %>% 
+  group_by(interval,wday) %>%
+  summarise(avgSteps =mean(steps))
+```
+
+The below panel plot shows a time series plot of the 5-minute interval on x-axi and the average number of steps taken, averaged across all weekday days or weekend days on y-axis.
+
+```{r wdayplot}
+
+ggplot(data=intWDStepsDF, aes(x=interval,y=avgSteps))+
+  geom_line()+facet_grid(wday~.)
+
+```
